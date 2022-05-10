@@ -127,7 +127,7 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
             available.difference_update(completed_packages)
 
             while True:  # We will wait until we pick depo again
-                for p in available:
+                for p in set(available):
                     if task.packages[p].weight > space_left:
                         available.remove(p)
 
@@ -138,6 +138,7 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
                 probs = np.array(list(map(lambda x: compute_prob(len(solution), trip[-1], x), available)))
                 selected = np.random.choice(list(available), p=probs / sum(probs))  # vyber hrany
                 trip.append(selected)
+                space_left -= task.packages[selected].weight
                 completed_packages.add(selected)
                 available.remove(selected)
 
@@ -219,14 +220,11 @@ def load_task(file):
     return Task(packages, depo, max_load)
 
 
-task = load_task("11_rojove algoritmy/domaci_ukol_data/data_32.xml")
-best_solution, pheromones = ant_solver(task, distance, ants=10, max_iterations=1000)
-
 # %% [markdown]
 # Vykreslíme si nalezené řešení a množství feromononu na jednotlivých hranách. Feromon bude modrý, tloušťka čáry značí množství feromonu na hraně. Červenou barvou vykreslíme nejlepší řešení a vypíšeme si i jeho fitness a pořadí měst v něm. Odkomentováním zakomentované řádky si můžete vyzkoušet, jak různé nastavení alpha a beta ovlivňuje nalezená řešení.
 
 # %%
-def show_trip(task, solution, trip_idx):
+def show_trip(task, pheromones, solution, trip_idx):
     trip = solution[trip_idx]
     lines = []
     colors = []
@@ -257,7 +255,21 @@ def show_trip(task, solution, trip_idx):
     plt.show()
 
 
-show_trip(task, best_solution, 0)
+def show_solution(task, pheromones, solution):
+    for i, trip in enumerate(solution):
+        show_trip(task, pheromones, solution, i)
+
+
+def train_and_show(file, **kwargs):
+    task = load_task(file)
+    best_solution, pheromones = ant_solver(task, distance, **kwargs)
+    show_solution(task, pheromones, best_solution)
+
+
+train_and_show("11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=10, max_iterations=1000)
+train_and_show("11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=500)
+train_and_show("11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=10, max_iterations=100)
+
 
 # %% [markdown]
 # Pěkná simulace hledání nejkratší cesty v grafu se nachází [zde](http://thiagodnf.github.io/aco-simulator).
