@@ -266,8 +266,8 @@ def train_and_show(file, **kwargs):
     show_solution(task, pheromones, best_solution)
 
 
-train_and_show("11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=10, max_iterations=1000)
-train_and_show("11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=500)
+# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=10, max_iterations=1000)
+# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=500)
 train_and_show("11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=10, max_iterations=100)
 
 
@@ -292,3 +292,20 @@ train_and_show("11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=10, max
 # Svůj kód, popis řešení, výsledky a jejich rozbor mi pošlete emailem do stanoveného deadline.
 
 # %%
+
+
+# %% [markdown]
+# Pouze z fitness se to skoro neučí, proto jsem si nemohl dovolit odstranit vzdálenost z výpočtu pravděpodobnosti kroku.
+# Jedná se o drobnou ale velmi důležitou heuristiku.
+#
+# Zároveň jsem původněchtěl sdílet feromony mezi jednotlivými auty (přišlo mi, že by to mohlo zjednodušit přenášení "dobrých" sledů balíčků mezi auty) to ale bohužel vůbec nefungovalo.
+# Většinou mi to nějak divně zdegenerovalo, třeba do případu, že každý balíček má vlastní auto.
+#
+# Řešení je relativně pomalé, protože pole feromonů je O(n^3), hlavně kvůli dost pesimistivkému odhadu počtu vozidel. To by šlo určitě zlepšit.
+# Zároveň se ale umí rozumně přiblížit vzorovému řešení (alespoň pokud je malý počet aut). Například ve velkém příkladu je hezky vidět jak prvních pár aut je zoptimalizovaných velmi dobře ale třeba 10. auto už má mnoho lokálních nefektivit.
+# Bohužel ale optimální řešení není stabilní a někdy to od něj trochu zdiverguje.
+#
+# Jedno možné malé vylepšení by bylo pustit lokální mravence na každý `trip`, kdy už je dané co se v daném tripu objede.
+# Protože někdy se tam nějaký neefektivní uzlík přece jen najde (hlavně v pozdějších autech).
+#
+# Možná by to dopadlo úplně jinak kdyby to nechal běžet 1000x déle (dny místo minut). Ale to jsem nezkoušel.
