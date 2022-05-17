@@ -80,8 +80,8 @@ def fitness(task, distance, solution):
 # Samotný algoritmus bude ještě potřebovat funkci na počáteční inicializaci feromonu, která by sice měla být stopa všude nulová, ale protože s ní pracujeme jako s pravděpodobností, tak by to nefungovalo, tak ji nastavíme na nějakou malou hodnotu. Také bude potřeba dělat update feromonu a to tak, že na všechny hrany v cestě rozpočítáme rovnoměrně tu fitness, která říká, jak byla váha dobrá. A protože délku chceme minimalizovat, takže použijeme inverzní Q/fit, kde Q bude nějaká konstanta.
 
 # %%
-def initialize_pheromone(N):
-    return 0.01 * np.ones(shape=(N, N, N))
+def initialize_pheromone(N, max_cars):
+    return 0.01 * np.ones(shape=(max_cars, N, N))
 
 
 def update_pheromone(pheromones_array, solutions, fits, Q=100, rho=0.6):
@@ -115,12 +115,17 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
         ret = pow(tau, alpha) * pow(dist, beta)
         return ret if ret > 0.000001 else 0.000001
 
-    pheromones_shape = pheromones.shape[0]
-    for i in range(N):
+    pheromones_shape = pheromones.shape[1]
+    yielded_count = 0
+    while yielded_count < N:
         solution = []
         completed_packages = set([task.depo])
 
         while len(completed_packages) < len(task.packages):
+            if len(solution) >= pheromones.shape[0]:
+                solution = None
+                break
+
             trip = [task.depo]
             space_left = task.max_load
             available = set(range(pheromones_shape))
@@ -145,21 +150,26 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
                 if trip[-1] == task.depo:
                     break
             solution.append(trip)
-        yield solution
+
+        if solution is not None:
+            yielded_count += 1
+            yield solution
 
 
 # %% [markdown]
 # Nyní už si můžeme vytvořit hlavní kód ACO.
 
 # %%
-def ant_solver(task, distance, ants=10, max_iterations=3000, alpha=1, beta=3, Q=100, rho=0.8):
-    pheromones = initialize_pheromone(len(task.packages))
+def ant_solver(task, distance, ants=10, max_iterations=3000, alpha=1, beta=3, Q=100, rho=0.8, max_cars=10):
+    pheromones = initialize_pheromone(len(task.packages), max_cars)
     best_solution = None
     best_fitness = float("inf")
+    fit_hist = []
 
     for i in range(max_iterations):
         solutions = list(generate_solutions(task, pheromones, distance, ants, alpha=alpha, beta=beta))
         fits = list(map(lambda x: fitness(task, distance, x), solutions))
+        fit_hist.append(min(fits))
         pheromones = update_pheromone(pheromones, solutions, fits, Q=Q, rho=rho)
 
         for s, f in zip(solutions, fits):
@@ -168,7 +178,7 @@ def ant_solver(task, distance, ants=10, max_iterations=3000, alpha=1, beta=3, Q=
                 best_solution = s
 
         print(f"{i:4}, {np.min(fits):.4f}, {np.mean(fits):.4f}, {np.max(fits):.4f}")
-    return best_solution, pheromones
+    return best_solution, pheromones, fit_hist
 
 
 # %% [markdown]
@@ -224,51 +234,84 @@ def load_task(file):
 # Vykreslíme si nalezené řešení a množství feromononu na jednotlivých hranách. Feromon bude modrý, tloušťka čáry značí množství feromonu na hraně. Červenou barvou vykreslíme nejlepší řešení a vypíšeme si i jeho fitness a pořadí měst v něm. Odkomentováním zakomentované řádky si můžete vyzkoušet, jak různé nastavení alpha a beta ovlivňuje nalezená řešení.
 
 # %%
-def show_trip(task, pheromones, solution, trip_idx):
+def show_trip(ax, color, task, pheromones, solution, trip_idx):
     trip = solution[trip_idx]
-    lines = []
-    colors = []
-    for i, v1 in enumerate(task.packages):
-        for j, v2 in enumerate(task.packages):
-            lines.append([(v1.x, v1.y), (v2.x, v2.y)])
-            colors.append(pheromones[trip_idx][i][j])
-
-    lc = mc.LineCollection(lines, linewidths=np.array(colors))
-
-    plt.figure(figsize=(12, 8))
-    ax = plt.gca()
-    ax.add_collection(lc)
-    ax.autoscale()
-
-    print("Fitness: ", fitness(task, distance, solution))
-
     solution_vertices = [task.packages[i] for i in trip]
-    pprint.pprint(solution_vertices)
 
     solution_lines = []
     for i, j in zip(trip, trip[1:]):
         solution_lines.append([(task.packages[i].x, task.packages[i].y), (task.packages[j].x, task.packages[j].y)])
 
-    solutions_lc = mc.LineCollection(solution_lines, colors="red")
+    solutions_lc = mc.LineCollection(solution_lines, colors=[color])
     ax.add_collection(solutions_lc)
+
+
+def show_feromones(ax, task, pheromones):
+    lines = []
+    colors = []
+    for i, v1 in enumerate(task.packages):
+        for j, v2 in enumerate(task.packages):
+            lines.append([(v1.x, v1.y), (v2.x, v2.y)])
+            colors.append(pheromones[i][j])
+
+    lc = mc.LineCollection(lines, linewidths=np.array(colors))
+    ax.add_collection(lc)
+
+
+def show_solution(task, pheromones, solution):
+    plt.figure(figsize=(12, 8))
+    ax = plt.gca()
+    colors = ["red", "green", "blue", "orange", "yellow", "brown", "violet", "grey"]
+    for i, trip in enumerate(solution):
+        show_trip(ax, colors[i % len(colors)], task, pheromones, solution, i)
+
+    ax.autoscale()
+    plt.show()
+
+    fig = plt.figure(figsize=(12, 8))
+    columns = 4
+    rows = (len(solution) + columns - 1) // columns
+    for i in range(1, columns * rows + 1):
+        ax = fig.add_subplot(rows, columns, i)
+        show_feromones(ax, task, pheromones[i])
+        ax.autoscale()
 
     plt.show()
 
 
-def show_solution(task, pheromones, solution):
-    for i, trip in enumerate(solution):
-        show_trip(task, pheromones, solution, i)
+def smooth(scalars, weight):
+    last = scalars[0]  # First value in the plot (first timestep)
+    smoothed = list()
+    for point in scalars:
+        smoothed_val = last * weight + (1 - weight) * point  # Calculate smoothed value
+        smoothed.append(smoothed_val)  # Save it
+        last = smoothed_val  # Anchor the last smoothed value
+
+    return smoothed
 
 
 def train_and_show(file, **kwargs):
     task = load_task(file)
-    best_solution, pheromones = ant_solver(task, distance, **kwargs)
+    best_solution, pheromones, fit_hist = ant_solver(task, distance, **kwargs)
+
+    print(min(fit_hist))
+
+    x = range(0, len(fit_hist))
+    plt.plot(x, smooth(fit_hist, 0.98))
+    plt.show()
+
     show_solution(task, pheromones, best_solution)
 
 
-# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=10, max_iterations=1000)
-# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=500)
-train_and_show("11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=10, max_iterations=100)
+# train_and_show(
+#     "11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=20, max_iterations=1500, alpha=1, beta=3, Q=100, rho=0.6, max_cars=10
+# )
+# train_and_show(
+#     "11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=700, alpha=1, beta=3, Q=100, rho=0.6, max_cars=15
+# )
+train_and_show(
+    "11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=20, max_iterations=300, alpha=3, beta=5, Q=100, rho=0.3, max_cars=60
+)
 
 
 # %% [markdown]
