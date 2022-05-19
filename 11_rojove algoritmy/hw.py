@@ -80,16 +80,16 @@ def fitness(task, distance, solution):
 # Samotný algoritmus bude ještě potřebovat funkci na počáteční inicializaci feromonu, která by sice měla být stopa všude nulová, ale protože s ní pracujeme jako s pravděpodobností, tak by to nefungovalo, tak ji nastavíme na nějakou malou hodnotu. Také bude potřeba dělat update feromonu a to tak, že na všechny hrany v cestě rozpočítáme rovnoměrně tu fitness, která říká, jak byla váha dobrá. A protože délku chceme minimalizovat, takže použijeme inverzní Q/fit, kde Q bude nějaká konstanta.
 
 # %%
-def initialize_pheromone(N, max_cars):
-    return 0.01 * np.ones(shape=(max_cars, N, N))
+def initialize_pheromone(N):
+    return 0.01 * np.ones(shape=(N, N))
 
 
 def update_pheromone(pheromones_array, solutions, fits, Q=100, rho=0.6):
     pheromone_update = np.zeros(shape=pheromones_array.shape)
     for solution, fit in zip(solutions, fits):
-        for i, trip in enumerate(solution):
+        for trip in solution:
             for x, y in zip(trip, trip[1:]):
-                pheromone_update[i][x][y] += Q / fit
+                pheromone_update[x][y] += Q / fit
 
     return (1 - rho) * pheromones_array + pheromone_update
 
@@ -104,28 +104,23 @@ def update_pheromone(pheromones_array, solutions, fits, Q=100, rho=0.6):
 # %%
 def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
     # pravdepodobnost vyberu dalsiho mesta
-    def compute_prob(trip_idx, v1, v2):
+    def compute_prob(v1, v2):
         # CHANGE: There will be many reqests with equal coordinates. We need to give them better than infinite probability.
         dist = distance(task, v1, v2)
         if dist < 1:
             dist = 2 - dist
         else:
             dist = 1 / dist
-        tau = pheromones[trip_idx, v1, v2]
+        tau = pheromones[v1, v2]
         ret = pow(tau, alpha) * pow(dist, beta)
         return ret if ret > 0.000001 else 0.000001
 
-    pheromones_shape = pheromones.shape[1]
-    yielded_count = 0
-    while yielded_count < N:
+    pheromones_shape = pheromones.shape[0]
+    for _ in range(N):
         solution = []
         completed_packages = set([task.depo])
 
         while len(completed_packages) < len(task.packages):
-            if len(solution) >= pheromones.shape[0]:
-                solution = None
-                break
-
             trip = [task.depo]
             space_left = task.max_load
             available = set(range(pheromones_shape))
@@ -140,7 +135,7 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
                 if trip[-1] != task.depo:
                     available.add(task.depo)
 
-                probs = np.array(list(map(lambda x: compute_prob(len(solution), trip[-1], x), available)))
+                probs = np.array(list(map(lambda x: compute_prob(trip[-1], x), available)))
                 selected = np.random.choice(list(available), p=probs / sum(probs))  # vyber hrany
                 trip.append(selected)
                 space_left -= task.packages[selected].weight
@@ -151,34 +146,32 @@ def generate_solutions(task, pheromones, distance, N, alpha=1, beta=3):
                     break
             solution.append(trip)
 
-        if solution is not None:
-            yielded_count += 1
-            yield solution
+        yield solution
 
 
 # %% [markdown]
 # Nyní už si můžeme vytvořit hlavní kód ACO.
 
 # %%
-def ant_solver(task, distance, ants=10, max_iterations=3000, alpha=1, beta=3, Q=100, rho=0.8, max_cars=10):
-    pheromones = initialize_pheromone(len(task.packages), max_cars)
-    best_solution = None
-    best_fitness = float("inf")
+def ant_solver(task, distance, ants=10, max_iterations=3000, alpha=1, beta=3, Q=100, rho=0.8):
+    pheromones = initialize_pheromone(len(task.packages))
+    good_solutions = []
     fit_hist = []
 
     for i in range(max_iterations):
         solutions = list(generate_solutions(task, pheromones, distance, ants, alpha=alpha, beta=beta))
+        solutions += list(map(lambda x: x[0], good_solutions))
+
         fits = list(map(lambda x: fitness(task, distance, x), solutions))
         fit_hist.append(min(fits))
         pheromones = update_pheromone(pheromones, solutions, fits, Q=Q, rho=rho)
 
-        for s, f in zip(solutions, fits):
-            if f < best_fitness:
-                best_fitness = f
-                best_solution = s
+        graded_solutions = list(zip(solutions, fits))
+        graded_solutions.sort(key=lambda x: x[1])
+        good_solutions = graded_solutions[: ants // 2]
 
         print(f"{i:4}, {np.min(fits):.4f}, {np.mean(fits):.4f}, {np.max(fits):.4f}")
-    return best_solution, pheromones, fit_hist
+    return good_solutions[0][0], pheromones, fit_hist
 
 
 # %% [markdown]
@@ -269,12 +262,16 @@ def show_solution(task, pheromones, solution):
     plt.show()
 
     fig = plt.figure(figsize=(12, 8))
-    columns = 4
-    rows = (len(solution) + columns - 1) // columns
-    for i in range(1, columns * rows + 1):
-        ax = fig.add_subplot(rows, columns, i)
-        show_feromones(ax, task, pheromones[i])
-        ax.autoscale()
+    # columns = 4
+    # rows = (len(solution) + columns - 1) // columns
+    # for i in range(1, columns * rows + 1):
+    #     ax = fig.add_subplot(rows, columns, i)
+    #     show_feromones(ax, task, pheromones[i])
+    #     ax.autoscale()
+
+    ax = fig.add_subplot(1, 1, 1)
+    show_feromones(ax, task, pheromones)
+    ax.autoscale()
 
     plt.show()
 
@@ -297,21 +294,15 @@ def train_and_show(file, **kwargs):
     print(min(fit_hist))
 
     x = range(0, len(fit_hist))
-    plt.plot(x, smooth(fit_hist, 0.98))
+    plt.plot(x, smooth(fit_hist, 0.5))
     plt.show()
 
     show_solution(task, pheromones, best_solution)
 
 
-# train_and_show(
-#     "11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=20, max_iterations=1500, alpha=1, beta=3, Q=100, rho=0.6, max_cars=10
-# )
-# train_and_show(
-#     "11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=20, max_iterations=700, alpha=1, beta=3, Q=100, rho=0.6, max_cars=15
-# )
-train_and_show(
-    "11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=20, max_iterations=300, alpha=3, beta=5, Q=100, rho=0.3, max_cars=60
-)
+# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_32.xml", ants=10, max_iterations=1500, alpha=1, beta=3, Q=100, rho=0.6)
+# train_and_show("11_rojove algoritmy/domaci_ukol_data/data_72.xml", ants=10, max_iterations=1000, alpha=0.5, beta=2, Q=10, rho=0.4)
+train_and_show("11_rojove algoritmy/domaci_ukol_data/data_422.xml", ants=10, max_iterations=300, alpha=0.5, beta=2, Q=50, rho=0.6)
 
 
 # %% [markdown]

@@ -48,17 +48,17 @@ Výsledek největšího datasetu je ale nic moc. Dost mi to zdegenerovalo jak je
 
 Ani když jsem ladil hyper parametry přesně pro větší vstup, tak se mi nepovedlo dostat rozumné řešení (jedna iterace trvá přibližně 4 vteřiny a nechával jsem to běhat ~300 iterací).
 
-Pro poslední stup se mi vyplatilo zvednou `alpha=3` a `beta=5`. Trénuje se to mnohem stabilněji. I když výsledky nejsou pořád nic moc. Ale podle trndu by to mohlo něco dělat, kdybych to nechal trénovat přes noc.
+Pro poslední stup se mi vyplatilo zvednou `alpha=.5` a `beta=2`. Trénuje se to mnohem stabilněji. Zároveň jsem použil elitismus, protože jinak bylo trénování dost nestabilní (dost často mi to zkolabovalo do nějakých `8000+` hodnot).
 
-![solution](./solution7.png)
-![pheromones](./pheromones7.png)
-![profress](./progress7.png)
+![solution](./solution8.png)
+![pheromones](./pheromones8.png)
+![progress](./progress8.png)
 
-Nejlepší výsledek pro velký vstup: `8926`, který je ale dost špatný (viz obrázek).
+Nejlepší výsledek pro velký vstup: `2893`.
 
 #### Časy
-Původně mi algoritmy běželi v $\mathcal{O(n^3)}$ což bylo pro největší vstup dost nepoužitelné. Povedlo se mi to ale zrychlit tím, že jsem omezil maximální počet použitých aut (viz kód).
-Teď už to běží v čase $\mathcal{O(n^2 \cdot max_cars)}$. To jsou pro jednodušší vstupy minuty a pro těžší desítky minut.
+Původně mi algoritmy běželi v $\mathcal{O(n^3)}$ což bylo pro největší vstup dost nepoužitelné. Ale potom jsem znovu zkusil sjednotit pheromony do jednoho grafu a tentokrát už mi to fungovalo. Může za to elitismus, který jsem tam přidal.
+Nyní už mi běží největší vsup v `~1 s/iteration`.
 
 #### Pozorování
-Je možné, že toto pozorování je tím, že se mi nepovedlo dosáhnout nějakých extra výsledků při trénování ale v mém řešení má největší vliv výpočet pravděpodobnosti nasvštívení políčka na základě vzdálenosti.
+Vypozoroval jsem, že bylo velmi důležité správně určit heuristiku pro pravděpodobnost na základě blízkosti políček. Zároveň mi velmi pomohl elitismus bez kterého se to mnohdy nic nenaučilo.
